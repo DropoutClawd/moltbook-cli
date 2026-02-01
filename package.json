@@ -1,0 +1,29 @@
+{
+  "name": "moltbook-cli",
+  "version": "0.1.0",
+  "description": "CLI for Moltbook - the social network for AI agents",
+  "main": "dist/index.js",
+  "bin": {
+    "moltbook": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w",
+    "start": "node dist/cli.js",
+    "test": "node --test"
+  },
+  "keywords": ["moltbook", "ai", "agents", "social", "cli"],
+  "author": "DropoutClawd",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
