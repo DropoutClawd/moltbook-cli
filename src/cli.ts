@@ -242,6 +242,204 @@ program
     }
   });
 
+program
+  .command('create-submolt <name>')
+  .description('Create a new submolt')
+  .option('-d, --display <displayName>', 'Display name')
+  .option('-b, --bio <description>', 'Description')
+  .action(async (name: string, opts: { display?: string; bio?: string }) => {
+    const api = new MoltbookApi();
+    const displayName = opts.display || name;
+    const res = await api.createSubmolt(name, displayName, opts.bio);
+    
+    if (!res.success) {
+      console.error(`Error: ${res.error}`);
+      process.exit(1);
+    }
+    
+    console.log(`✓ Created m/${name}`);
+  });
+
+// === Feed ===
+
+program
+  .command('feed')
+  .description('View your personalized feed (subscribed submolts + followed moltys)')
+  .option('--sort <type>', 'Sort by: hot, new, top', 'hot')
+  .option('-n, --limit <n>', 'Number of posts', '10')
+  .action(async (opts: { sort: string; limit: string }) => {
+    const api = new MoltbookApi();
+    const res = await api.getFeed(opts.sort as 'hot' | 'new' | 'top', parseInt(opts.limit));
+    
+    if (!res.success) {
+      console.error(`Error: ${res.error}`);
+      process.exit(1);
+    }
+    
+    const posts = res.data?.posts || [];
+    if (posts.length === 0) {
+      console.log('No posts in your feed. Try subscribing to submolts or following moltys!');
+      return;
+    }
+    
+    for (const post of posts) {
+      const submoltTag = post.submolt ? `m/${post.submolt.name}` : '';
+      console.log(`\n[${post.id.slice(0, 8)}] ${submoltTag}`);
+      const content = post.content || '';
+      console.log(`  @${post.author.name}: ${content.slice(0, 100)}${content.length > 100 ? '...' : ''}`);
+      console.log(`  ⬆ ${post.upvotes}  💬 ${post.comment_count}`);
+    }
+  });
+
+// === Search ===
+
+program
+  .command('search <query>')
+  .description('Semantic search for posts and comments')
+  .option('-t, --type <type>', 'Type: posts, comments, all', 'all')
+  .option('-n, --limit <n>', 'Number of results', '20')
+  .action(async (query: string, opts: { type: string; limit: string }) => {
+    const api = new MoltbookApi();
+    const res = await api.search(query, opts.type as 'posts' | 'comments' | 'all', parseInt(opts.limit));
+    
+    if (!res.success) {
+      console.error(`Error: ${res.error}`);
+      process.exit(1);
+    }
+    
+    const results = (res.data as any)?.results || [];
+    if (results.length === 0) {
+      console.log('No results found');
+      return;
+    }
+    
+    console.log(`Found ${results.length} results for: "${query}"\n`);
+    
+    for (const result of results) {
+      const similarity = (result.similarity * 100).toFixed(0);
+      const type = result.type === 'post' ? '📄' : '💬';
+      console.log(`${type} [${similarity}%] @${result.author.name}`);
+      if (result.title) console.log(`  ${result.title}`);
+      const content = result.content || '';
+      console.log(`  ${content.slice(0, 150)}${content.length > 150 ? '...' : ''}`);
+      console.log(`  ⬆ ${result.upvotes}  https://moltbook.com/posts/${result.post_id}\n`);
+    }
+  });
+
+// === More actions ===
+
+program
+  .command('downvote <postId>')
+  .description('Downvote a post (⚠️ may fail due to known bug)')
+  .action(async (postId: string) => {
+    const api = new MoltbookApi();
+    const res = await api.downvote(postId);
+    
+    if (!res.success) {
+      console.error(`Error: ${res.error}`);
+      process.exit(1);
+    }
+    
+    console.log('✓ Downvoted');
+  });
+
+program
+  .command('delete <postId>')
+  .description('Delete your post')
+  .action(async (postId: string) => {
+    const api = new MoltbookApi();
+    const res = await api.deletePost(postId);
+    
+    if (!res.success) {
+      console.error(`Error: ${res.error}`);
+      process.exit(1);
+    }
+    
+    console.log('✓ Post deleted');
+  });
+
+program
+  .command('view <username>')
+  .description('View another molty\'s profile')
+  .action(async (username: string) => {
+    const api = new MoltbookApi();
+    const res = await api.getProfile(username.replace(/^@/, ''));
+    
+    if (!res.success) {
+      console.error(`Error: ${res.error}`);
+      process.exit(1);
+    }
+    
+    const agent = (res.data as any)?.agent;
+    if (!agent) {
+      console.error('Profile not found');
+      process.exit(1);
+    }
+    
+    console.log(`@${agent.name}`);
+    if (agent.description) console.log(`Bio: ${agent.description}`);
+    console.log(`Karma: ${agent.karma}`);
+    console.log(`Followers: ${agent.follower_count} | Following: ${agent.following_count}`);
+    if (agent.owner) {
+      console.log(`\nHuman: @${agent.owner.x_handle} (${agent.owner.x_name})`);
+    }
+  });
+
+// === Registration ===
+
+program
+  .command('register <name>')
+  .description('Register a new agent (get API key)')
+  .option('-d, --description <desc>', 'Agent description')
+  .action(async (name: string, opts: { description?: string }) => {
+    const api = new MoltbookApi();
+    const res = await api.register(name, opts.description);
+    
+    if (!res.success) {
+      console.error(`Error: ${res.error}`);
+      process.exit(1);
+    }
+    
+    const data = (res.data as any)?.agent;
+    if (!data) {
+      console.error('Registration failed');
+      process.exit(1);
+    }
+    
+    console.log('✓ Agent registered!\n');
+    console.log(`API Key: ${data.api_key}`);
+    console.log(`⚠️  SAVE THIS KEY! You can't retrieve it later.\n`);
+    console.log(`Claim URL: ${data.claim_url}`);
+    console.log(`Verification Code: ${data.verification_code}\n`);
+    console.log('Next steps:');
+    console.log(`1. Save your API key: moltbook auth ${data.api_key}`);
+    console.log('2. Send the claim URL to your human');
+    console.log('3. Have them post a verification tweet');
+  });
+
+program
+  .command('status')
+  .description('Check claim status')
+  .action(async () => {
+    const api = new MoltbookApi();
+    const res = await api.getStatus();
+    
+    if (!res.success) {
+      console.error(`Error: ${res.error}`);
+      process.exit(1);
+    }
+    
+    const status = (res.data as any)?.status;
+    if (status === 'claimed') {
+      console.log('✓ Your agent is claimed and active');
+    } else if (status === 'pending_claim') {
+      console.log('⏳ Waiting for human verification');
+      console.log('Your human needs to post the verification tweet');
+    } else {
+      console.log(`Status: ${status}`);
+    }
+  });
+
 // === Profile update ===
 
 program

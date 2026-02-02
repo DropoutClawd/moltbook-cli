@@ -71,6 +71,33 @@ export class MoltbookApi {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
+        // Enhanced 401 error handling
+        if (res.status === 401) {
+          let errorMsg = 'Authentication failed';
+          
+          // Check if this is the known path parameter bug
+          if (path.includes('/:') || /\/[^\/]+\/[^\/]+/.test(path)) {
+            errorMsg = '401 Unauthorized - Known Moltbook API bug with path parameters';
+            if (data.error) errorMsg += `: ${data.error}`;
+            errorMsg += '\n\nWorkaround: Some endpoints are currently broken due to a server-side authentication bug.';
+            errorMsg += '\nThis affects endpoints like /posts/:id/comments, /posts/:id/upvote, etc.';
+            errorMsg += '\nThe team is aware and working on a fix.';
+          } else if (!this.apiBase.includes('www.moltbook.com')) {
+            errorMsg = '401 Unauthorized - Make sure you\'re using https://www.moltbook.com (with www)';
+            errorMsg += '\nUsing moltbook.com without www will strip your Authorization header!';
+          } else {
+            errorMsg = '401 Unauthorized - Check your API key';
+            errorMsg += '\nRun: moltbook auth <your-api-key>';
+            errorMsg += '\nOr set MOLTBOOK_API_KEY environment variable';
+          }
+          
+          return {
+            success: false,
+            error: errorMsg,
+            status: res.status
+          };
+        }
+        
         return {
           success: false,
           error: data.error || data.message || `HTTP ${res.status}`,
@@ -170,6 +197,10 @@ export class MoltbookApi {
     return this.request('DELETE', `/submolts/${submolt}/subscribe`);
   }
 
+  async createSubmolt(name: string, displayName: string, description?: string) {
+    return this.request('POST', '/submolts', { name, display_name: displayName, description });
+  }
+
   // === DMs ===
   
   async checkDms() {
@@ -182,5 +213,48 @@ export class MoltbookApi {
 
   async sendDm(toUsername: string, body: string) {
     return this.request('POST', '/agents/dm/send', { to: toUsername, body });
+  }
+
+  // === Registration ===
+  
+  async register(name: string, description?: string) {
+    return this.request<{ agent: { api_key: string; claim_url: string; verification_code: string } }>('POST', '/agents/register', { name, description });
+  }
+
+  async getStatus() {
+    return this.request<{ status: string }>('GET', '/agents/status');
+  }
+
+  // === Feed ===
+  
+  async getFeed(sort: 'hot' | 'new' | 'top' = 'hot', limit = 25) {
+    const params = new URLSearchParams({ sort, limit: String(limit) });
+    return this.request<{ posts: Post[] }>('GET', `/feed?${params}`);
+  }
+
+  // === Search ===
+  
+  async search(query: string, type: 'posts' | 'comments' | 'all' = 'all', limit = 20) {
+    const params = new URLSearchParams({ q: query, type, limit: String(limit) });
+    return this.request('GET', `/search?${params}`);
+  }
+
+  // === More actions ===
+  
+  async downvote(postId: string) {
+    return this.request('POST', `/posts/${postId}/downvote`);
+  }
+
+  async deletePost(postId: string) {
+    return this.request('DELETE', `/posts/${postId}`);
+  }
+
+  async getProfile(name: string) {
+    const params = new URLSearchParams({ name });
+    return this.request<{ agent: Agent }>('GET', `/agents/profile?${params}`);
+  }
+
+  async upvoteComment(commentId: string) {
+    return this.request('POST', `/comments/${commentId}/upvote`);
   }
 }
